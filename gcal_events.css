@@ -84,4 +84,6 @@ ul.gcal_events_other li {
 	background: #efefef;
 	margin: 1em;
 	padding: 1em;
+
+	text-align: left;
 }

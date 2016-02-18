@@ -633,7 +633,7 @@ function gcal_events_get_events($which_block) {
   $client->setApplicationName('gcal_events_feed');
   $client->setDeveloperKey($developer_id);
 
-	// To have a option for displaying this week or this month
+	// To have a option for displaying this week or this month, by jsong
 	//dpm($which_block);
 	//$thisweek = date('Y-m-d', strtotime('-1 day', strtotime('this week')));
 	//$timeMin = $thisweek . 'T00:00:00' . date('P')
@@ -855,6 +855,8 @@ function theme_gcal_events_contents($vars) {
 				}
 			}
 			$output .= '<h3>Facility is currently '.$openstatus.'</h3>';
+			$output .= '<p>Google Calendar ID: berklee.edu_e19c15na5li0ubst0nminvndnc@group.calendar.google.com<br/>
+									copy and paste the ID to your calendar search box to display on Google calendar page.</p>';
 		}
 		else{
 			$output .= gcal_events_display_events($use_item_list, $vars['gcal_events']);
