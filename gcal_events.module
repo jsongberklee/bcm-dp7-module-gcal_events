@@ -288,6 +288,7 @@ function gcal_events_theme() {
       'variables' => array(
         'gcal_events' => NULL,
         'which_block' => NULL,
+        'delta' => NULL, // added by jsong
       ),
     ),
   );
@@ -378,6 +379,28 @@ private calendars will not work.'),
     '#description' => t('Show only events from this calendar day, (not events in the next 24 hours)'),
     '#default_value' => variable_get('gcal_events_today_only_' . $delta, GCAL_EVENTS_DEFAULT_TODAY_ONLY)
   );
+
+  //by jsong
+  $form['calendar_option'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Calendar Options',
+    '#collapsible' => TRUE,
+    '#description' => t('This section deals with displaying the current status. (by jsong)')
+    );
+  $form['calendar_option']['gcal_events_currentstat'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Create Current Status Block with this calendar(by jsong)',
+    '#default_value' => variable_get('gcal_events_currentstat_'.$delta, FALSE),
+    '#description' => t('Enable grouping events by each date')
+    );
+  // added by jsong, for grouping events per each date
+  $form['calendar_option']['gcal_events_groupby_date'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Group events by each date (by jsong)',
+    '#default_value' => variable_get('gcal_events_groupby_date_'.$delta, FALSE),
+    '#description' => t('Enable grouping events by each date(7day maximum for now), **Note: make sure to set the enough "Number of Events" above')
+    );
+
 
   $form['datetime'] = array(
     '#type' => 'fieldset',
@@ -531,6 +554,10 @@ function gcal_events_block_save($delta, $edit) {
 
   variable_set('gcal_events_timeformat_' . $delta, check_plain($edit['gcal_events_timeformat']));
   variable_set('gcal_events_dateformat_' . $delta, check_plain($edit['gcal_events_dateformat']));
+
+	//added by jsong
+  variable_set('gcal_events_currentstat_' . $delta, $edit['gcal_events_currentstat']);
+  variable_set('gcal_events_groupby_date_' . $delta, $edit['gcal_events_groupby_date']);
 }
 
 /**
@@ -574,13 +601,16 @@ function gcal_events_delete_block($block_number) {
   variable_del('gcal_events_template_loc_' . $block_number);
   variable_del('gcal_events_empty_' . $block_number);
   variable_del('gcal_events_footer_' . $block_number);
+
+	//added by jsong
+  variable_del('gcal_events_currentstat_' . $block_number);
+  variable_del('gcal_events_groupby_date_' . $block_number);
 }
 
 /**
  * A block content function.
  */
 function gcal_events_get_events($which_block) {
-
   // for timing
   $start_time = microtime(true);
 
@@ -839,8 +869,10 @@ function theme_gcal_events_contents($vars) {
  	}
   else {
 
+		$which_block = $vars['which_block'];
+
 	  // if else is added by jsong, to display current open status of facility
-		if($vars['which_block'] == 'gcal_events-2'){
+		if($which_block == 'gcal_events-2'){
 			$events_today = $vars['gcal_events'];
 			$openstatus = 'CLOSED';
 			foreach ($events_today as $event) {
@@ -859,7 +891,10 @@ function theme_gcal_events_contents($vars) {
 									copy and paste the ID to your calendar search box to display on Google calendar page.</p>';
 		}
 		else{
-			$output .= gcal_events_display_events($use_item_list, $vars['gcal_events']);
+			// added by jsong
+			$groupby_date = variable_get('gcal_events_groupby_date_' . $which_block, false);
+
+			$output .= gcal_events_display_events($use_item_list, $vars['gcal_events'], 'gcal_events', $groupby_date);
 		}
 
   }
@@ -868,12 +903,18 @@ function theme_gcal_events_contents($vars) {
   return $output;
 }
 
-function gcal_events_display_events($use_item_list, $events, $class='gcal_events') {
+function gcal_events_display_events($use_item_list, $events, $class='gcal_events', $groupby_date = false) {
   if ($class != "gcal_events") {
     $class = "gcal_events_" . $class;
   }
   if ($use_item_list) {
-    return theme('item_list', array('items' => gcal_events_just_entries($events), 'title' => NULL, 'type' => 'ul', 'attributes' => array('class' => $class)));
+
+		if($groupby_date){
+	  	return gcal_events_just_entries_groupby_date($events);
+	  }else{
+		  return theme('item_list', array('items' => gcal_events_just_entries($events), 'title' => NULL, 'type' => 'ul', 'attributes' => array('class' => $class)));
+	  }
+
   }
   else {
     return join("", gcal_events_just_entries($events));
@@ -919,6 +960,35 @@ function gcal_events_just_entries($events) {
   }
   return $just_entries;
 }
+/* ADDED BY JSONG */
+function gcal_events_just_entries_groupby_date($events) {
+	dpm($events);
+	$date = '';
+	$output = '<div class="gcal_events-groupby-date-wrapper"><ul class="gcal-each-date">';
+	$i=0;
+  foreach ($events as $event) {
+	  if($date == $event['date']){
+		  $output .= '<li class="gcal-each-entry">'.$event['event'].'</li>';
+	  }else{
+			$i++;
+		  //set maximum date range from today
+		  if($i >= 7){
+				$output .= '</ul></li></ul>';
+			   break;
+			}else{
+				$output .= $i==1 ? '' : '</ul></li>';
+			}
+
+ 		  $date = $event['date'];
+ 		  //$output.= '</li></ul><ul class="gcal-each-date">';
+		  $output .= '<li class="gcal-each-date-'.$i.' has-child"><h4>'.$event['date'].'</h4><ul><li class="gcal-each-entry">'.$event['event'].'</li>';
+	  }
+  }
+
+	$output .= '</ul></div>';
+  return $output;
+}
+/**/
 
 function gcal_events_debug($string) {
   gcal_events_debug_master(array('level' => 1, 'msg' => $string));
