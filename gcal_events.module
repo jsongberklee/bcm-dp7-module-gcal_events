@@ -43,6 +43,9 @@ define('GCAL_EVENTS_DEFAULT_HEADING_OTHER', '<b>Other</b><hr />');
 
 define('GCAL_EVENTS_DEFAULT_TIMEZONE', date_default_timezone_get());
 
+//by jsong
+define('GCAL_EVENTS_CURRENT_STATUS_DELTA', 'gcal_events-currentstat');
+
 /**
  * Implementation of hook_permission().
  */
@@ -288,7 +291,6 @@ function gcal_events_theme() {
       'variables' => array(
         'gcal_events' => NULL,
         'which_block' => NULL,
-        'delta' => NULL, // added by jsong
       ),
     ),
   );
@@ -305,6 +307,9 @@ function gcal_events_block_info() {
     $blocks['gcal_events-' . $index]['cache'] = DRUPAL_CACHE_GLOBAL;
   }
 
+  //by jsong, add a static block to display current status if user wants
+  $blocks[GCAL_EVENTS_CURRENT_STATUS_DELTA] = array('info'=>t('GCal Events Current Status'));
+	//if()
   return $blocks;
 }
 
@@ -312,6 +317,10 @@ function gcal_events_block_info() {
  * Implementation of hook_block_configure().
  */
 function gcal_events_block_configure($delta) {
+
+	//by jsong, disable this custom configuration for the current status block
+	if($delta == GCAL_EVENTS_CURRENT_STATUS_DELTA) return;
+
   $form = array();
 
   $form['gcal_events_block'] = array(
@@ -387,20 +396,30 @@ private calendars will not work.'),
     '#collapsible' => TRUE,
     '#description' => t('This section deals with displaying the current status. (by jsong)')
     );
+  //by jsong, for create displaying current status block
   $form['calendar_option']['gcal_events_currentstat'] = array(
     '#type' => 'checkbox',
     '#title' => 'Create Current Status Block with this calendar(by jsong)',
     '#default_value' => variable_get('gcal_events_currentstat_'.$delta, FALSE),
     '#description' => t('Enable grouping events by each date')
     );
-  // added by jsong, for grouping events per each date
+  //by jsong, for selecting the region of current status block
+	$theme_default = variable_get('theme_default', 'bartik');
+	$form['calendar_option']['gcal_events_currentstat_region'] = array(
+	  '#type' => 'select',
+	  '#title' => t('Select theme region (Default theme only)'),
+	  '#default_value' => variable_get('gcal_events_currentstat_region_'.$delta, 'None'),
+	  '#empty_value' => 'None',
+	  '#options' => system_region_list($theme_default),
+    '#description' => t('Select the region to display the current status block, only works if you check the checkbox right above this. You can have ONLY ONE s'),
+	);
+  //by jsong, for grouping events per each date
   $form['calendar_option']['gcal_events_groupby_date'] = array(
     '#type' => 'checkbox',
     '#title' => 'Group events by each date (by jsong)',
     '#default_value' => variable_get('gcal_events_groupby_date_'.$delta, FALSE),
     '#description' => t('Enable grouping events by each date(7day maximum for now), **Note: make sure to set the enough "Number of Events" above')
     );
-
 
   $form['datetime'] = array(
     '#type' => 'fieldset',
@@ -519,6 +538,9 @@ function gcal_events_block_save($delta, $edit) {
   // Since the first block is the only one that allows configuration, we
   // need to check $delta to make sure we only save it.
 
+  //by jsong, disable saving this custom configuration for the current status block
+	if($delta == GCAL_EVENTS_CURRENT_STATUS_DELTA) return;
+
   // Have Drupal save the string to the database.
   $calendar_id = check_plain($edit['gcal_events_calendar_id']);
 
@@ -557,6 +579,7 @@ function gcal_events_block_save($delta, $edit) {
 
 	//added by jsong
   variable_set('gcal_events_currentstat_' . $delta, $edit['gcal_events_currentstat']);
+  variable_set('gcal_events_currentstat_region_' . $delta, $edit['gcal_events_currentstat_region']);
   variable_set('gcal_events_groupby_date_' . $delta, $edit['gcal_events_groupby_date']);
 }
 
@@ -567,10 +590,25 @@ function gcal_events_block_view($delta) {
   // If $op is "view", then we need to generate the block for display
   // purposes. The $delta parameter tells us which block is being requested.
 
-  $block['subject'] = t('Calendar ' . ($delta+1));
-  $block['content'] = gcal_events_contents($delta);
+	//by jsong, to display "GCAL_EVENTS_CURRENT_STATUS_DELTA" block
+	$block = array();
+	if($delta == GCAL_EVENTS_CURRENT_STATUS_DELTA){
+		$block['subject'] = t('Calendar Current Status');
+		$block['content'] = gcal_events_contents_currentstat($delta);
+	}else{
+		$block['subject'] = t('Calendar ' . ($delta+1));
+		$block['content'] = gcal_events_contents($delta);
+	}
+
+	//original
+	//$block['subject'] = t('Calendar ' . ($delta+1));
+	//$block['content'] = gcal_events_contents($delta);
 
   return $block;
+}
+function gcal_events_contents_currentstat($which_block){
+
+	return 'Current status contents';
 }
 
 function block_reset_defaults($form, &$form_state) {
@@ -604,6 +642,7 @@ function gcal_events_delete_block($block_number) {
 
 	//added by jsong
   variable_del('gcal_events_currentstat_' . $block_number);
+  variable_del('gcal_events_currentstat_region_' . $block_number);
   variable_del('gcal_events_groupby_date_' . $block_number);
 }
 
@@ -664,7 +703,6 @@ function gcal_events_get_events($which_block) {
   $client->setDeveloperKey($developer_id);
 
 	// To have a option for displaying this week or this month, by jsong
-	//dpm($which_block);
 	//$thisweek = date('Y-m-d', strtotime('-1 day', strtotime('this week')));
 	//$timeMin = $thisweek . 'T00:00:00' . date('P')
 	$timeMin = date('Y-m-d') . 'T00:00:00' . date('P');
@@ -869,10 +907,13 @@ function theme_gcal_events_contents($vars) {
  	}
   else {
 
+		//by jsong
 		$which_block = $vars['which_block'];
-
+		$display_currentstat = variable_get('gcal_events_currentstat_'.$which_block, FALSE);
+		$groupby_date = variable_get('gcal_events_groupby_date_' . $which_block, false);
 	  // if else is added by jsong, to display current open status of facility
-		if($which_block == 'gcal_events-2'){
+		/*
+		if($display_currentstat){
 			$events_today = $vars['gcal_events'];
 			$openstatus = 'CLOSED';
 			foreach ($events_today as $event) {
@@ -889,12 +930,20 @@ function theme_gcal_events_contents($vars) {
 			$output .= '<h3>Facility is currently '.$openstatus.'</h3>';
 			$output .= '<p>Google Calendar ID: berklee.edu_e19c15na5li0ubst0nminvndnc@group.calendar.google.com<br/>
 									copy and paste the ID to your calendar search box to display on Google calendar page.</p>';
-		}
-		else{
-			// added by jsong
-			$groupby_date = variable_get('gcal_events_groupby_date_' . $which_block, false);
+		}*/
 
-			$output .= gcal_events_display_events($use_item_list, $vars['gcal_events'], 'gcal_events', $groupby_date);
+		if($display_currentstat){
+			gcal_events_display_currentstat_block($vars['gcal_events'], $which_block);
+		}
+
+		if($groupby_date){
+
+			$output .= gcal_events_display_events_groupby_date($vars['gcal_events']);
+
+		}else{
+
+			$output .= gcal_events_display_events($use_item_list, $vars['gcal_events']);
+
 		}
 
   }
@@ -902,23 +951,112 @@ function theme_gcal_events_contents($vars) {
 
   return $output;
 }
+/*
+ * grab all events in oneday
+ */
+function _get_events_oneday($events, $date=''){
 
-function gcal_events_display_events($use_item_list, $events, $class='gcal_events', $groupby_date = false) {
+	if($date == '') $date = '';
+
+	$onedayEvents = array();
+
+	foreach ($events as $event) {
+		if($date != '' && $date != $event['date']) break;
+		$date = $event['date'];
+		$onedayEvents[] = $event;
+	}
+	return $onedayEvents;
+}
+/*
+ * activate the emergency block
+ */
+function _activate_emergency_block($event){
+/////////////////////////////////////////////////////
+// MUST RESOVE LINE #260 ON template.php later!!!
+// temporary js added for testing gcal_events module
+/////////////////////////////////////////////////////
+/*
+	drupal_add_js('
+		jQuery(document).ready(function(){
+			$emergencyBar = jQuery(".region-emergency-bar");
+			$blocks = $emergencyBar.find(".block");
+			if($blocks.length < 2){ $emergencyBar.remove(); }
+			else{jQuery("#block-block-30").remove();}
+		});
+		', 'inline');
+*/
+
+	//block(module) 29(block name)
+	$b = block_load('block', '29');
+	$b = _block_get_renderable_array(_block_render_blocks(array($b)));
+
+	$b['block_29']['#markup'] = $event['description'];
+	//$b['block_29']['#block']->subject = '';//'Facility is currently '.$openstatus;
+	$b['block_29']['#weight'] = -10;
+
+//dpm(render($b));
+	drupal_add_region_content('emergency_bar', render($b));
+
+}
+
+function gcal_events_display_currentstat_block($events, $which_block) {
+
+	$todayDate = date(variable_get('gcal_events_dateformat_' . $which_block, ''), time());
+	$events = _get_events_oneday($events, $todayDate);
+
+	if(empty($events)){
+		drupal_set_message(t("No information is provided for today, please update your Google Calendar accordingly."), 'error');
+		return;
+	}
+	$openstatus = 'CLOSED';
+	foreach ($events as $event) {
+		$timeclose = $event['endtimestamp'];
+		$timeopen = $event['timestamp'];
+		$now = time();
+		if(($timeopen && $timeclose) && ($timeopen < $now && $timeclose > $now)){
+			$openstatus = 'OPEN';
+			//dpm('open->'.$timeopen.'; now->'.time().'; close->'.$timeclose);
+			break;
+		}
+	}
+
+	$output .= '<p>Google Calendar ID: berklee.edu_e19c15na5li0ubst0nminvndnc@group.calendar.google.com,<br/>copy and paste the ID to your calendar search box to display on Google calendar page.</p>';
+
+	$region = variable_get('gcal_events_currentstat_region_'.$which_block, 'None');
+
+	//$block = array('subject'=>null, 'content'=>$output);
+	//$b = block_load('weekhours', 'weekhours_current');
+	$b = block_load('gcal_events', GCAL_EVENTS_CURRENT_STATUS_DELTA);
+	$b = _block_get_renderable_array(_block_render_blocks(array($b)));
+
+	//<i class="fa fa-chevron-circle-right" style="color:#16ac96;"></i>
+	$openstatus = '<a class="'.GCAL_EVENTS_CURRENT_STATUS_DELTA.' weekhours-status" href="/about-us/library-hours">Our facility is <b>'.$openstatus.'</b></a>'.$output;
+
+	$b['gcal_events_'.GCAL_EVENTS_CURRENT_STATUS_DELTA]['#markup'] = $openstatus;
+	$b['gcal_events_'.GCAL_EVENTS_CURRENT_STATUS_DELTA]['#block']->subject = '';//'Facility is currently '.$openstatus;
+	$b['gcal_events_'.GCAL_EVENTS_CURRENT_STATUS_DELTA]['#weight'] = -10;
+
+	drupal_add_region_content($region, render($b));
+
+}
+
+function gcal_events_display_events_groupby_date($events) {
+
+  return gcal_events_just_entries_groupby_date($events);
+
+}
+
+function gcal_events_display_events($use_item_list, $events, $class='gcal_events') {
+
   if ($class != "gcal_events") {
     $class = "gcal_events_" . $class;
   }
   if ($use_item_list) {
-
-		if($groupby_date){
-	  	return gcal_events_just_entries_groupby_date($events);
-	  }else{
-		  return theme('item_list', array('items' => gcal_events_just_entries($events), 'title' => NULL, 'type' => 'ul', 'attributes' => array('class' => $class)));
-	  }
-
-  }
-  else {
+		return theme('item_list', array('items' => gcal_events_just_entries($events), 'title' => NULL, 'type' => 'ul', 'attributes' => array('class' => $class)));
+  }else{
     return join("", gcal_events_just_entries($events));
   }
+
 }
 
 function is_today($event) {
@@ -962,11 +1100,21 @@ function gcal_events_just_entries($events) {
 }
 /* ADDED BY JSONG */
 function gcal_events_just_entries_groupby_date($events) {
-	dpm($events);
 	$date = '';
 	$output = '<div class="gcal_events-groupby-date-wrapper"><ul class="gcal-each-date">';
 	$i=0;
+
   foreach ($events as $event) {
+
+	  // check if this event is for Emergency notification
+	  $x = strpos($event['title'],'[emergency]');
+	  if($x !==false){
+		  $now = time();
+		  if($event['today'] == true && ($event['endtimestamp'] && ($event['timestamp'] < $now && $event['endtimestamp'] > $now))) _activate_emergency_block($event);
+
+			unset($event);
+	  }
+
 	  if($date == $event['date']){
 		  $output .= '<li class="gcal-each-entry">'.$event['event'].'</li>';
 	  }else{
@@ -978,11 +1126,10 @@ function gcal_events_just_entries_groupby_date($events) {
 			}else{
 				$output .= $i==1 ? '' : '</ul></li>';
 			}
-
  		  $date = $event['date'];
- 		  //$output.= '</li></ul><ul class="gcal-each-date">';
 		  $output .= '<li class="gcal-each-date-'.$i.' has-child"><h4>'.$event['date'].'</h4><ul><li class="gcal-each-entry">'.$event['event'].'</li>';
 	  }
+
   }
 
 	$output .= '</ul></div>';
